@@ -76,7 +76,7 @@ namespace VContainer.Internal
             {
                 this.Data = data;
                 var injectAttributes = memberInfo.GetCustomAttributes<InjectAttribute>(false);
-                if (!injectAttributes.Any())
+                if (injectAttributes.Any())
                 {
                     Attribute = injectAttributes.First();
                 }
