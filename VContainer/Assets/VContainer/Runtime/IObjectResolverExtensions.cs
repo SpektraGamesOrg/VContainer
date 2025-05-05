@@ -40,9 +40,11 @@ namespace VContainer
 
         public static object ResolveOrParameter(
             this IObjectResolver resolver,
+            InjectAttribute injectAttribute,
             Type parameterType,
             string parameterName,
-            IReadOnlyList<IInjectParameter> parameters)
+            IReadOnlyList<IInjectParameter> parameters,
+            out bool success)
         {
             if (parameters != null)
             {
@@ -52,11 +54,26 @@ namespace VContainer
                     var parameter = parameters[i];
                     if (parameter.Match(parameterType, parameterName))
                     {
+                        success = true;
                         return parameter.GetValue(resolver);
                     }
                 }
             }
-            return resolver.Resolve(parameterType);
+
+            if (injectAttribute == null || injectAttribute.ForceRequire)
+            {
+                success = true;
+                return resolver.Resolve(parameterType);
+            }
+
+            if (resolver.TryResolve(parameterType, out var result))
+            {
+                success = true;
+                return result;
+            }
+            
+            success = false;
+            return null;
         }
     }
 }

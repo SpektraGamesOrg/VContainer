@@ -15,6 +15,17 @@ namespace VContainer
     [AttributeUsage(AttributeTargets.Constructor | AttributeTargets.Method | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
     public class InjectAttribute : PreserveAttribute
     {
+        public readonly bool ForceRequire = true;
+
+        public InjectAttribute()
+        {
+            
+        }
+        
+        public InjectAttribute(bool forceRequire)
+        {
+            ForceRequire = forceRequire;
+        }
     }
 
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, AllowMultiple = false, Inherited = true)]

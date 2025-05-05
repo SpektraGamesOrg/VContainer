@@ -38,17 +38,21 @@ namespace VContainer.Internal
                 {
                     var parameterInfo = parameterInfos[i];
                     parameterValues[i] = resolver.ResolveOrParameter(
+                        null,
                         parameterInfo.ParameterType,
                         parameterInfo.Name,
-                        parameters);
+                        parameters,
+                        out bool success);
                 }
+
                 var instance = injectTypeInfo.InjectConstructor.ConstructorInfo.Invoke(parameterValues);
                 Inject(instance, resolver, parameters);
                 return instance;
             }
             catch (VContainerException ex)
             {
-                throw new VContainerException(ex.InvalidType, $"Failed to resolve {injectTypeInfo.Type} : {ex.Message}");
+                throw new VContainerException(ex.InvalidType,
+                    $"Failed to resolve {injectTypeInfo.Type} : {ex.Message}");
             }
             finally
             {
@@ -63,8 +67,10 @@ namespace VContainer.Internal
 
             foreach (var x in injectTypeInfo.InjectFields)
             {
-                var fieldValue = resolver.ResolveOrParameter(x.FieldType, x.Name, parameters);
-                x.SetValue(obj, fieldValue);
+                var fieldValue = resolver.ResolveOrParameter(x.Attribute, x.Data.FieldType, x.Data.Name, parameters,
+                    out bool success);
+                if (success)
+                    x.Data.SetValue(obj, fieldValue);
             }
         }
 
@@ -75,8 +81,10 @@ namespace VContainer.Internal
 
             foreach (var x in injectTypeInfo.InjectProperties)
             {
-                var propValue = resolver.ResolveOrParameter(x.PropertyType, x.Name, parameters);
-                x.SetValue(obj, propValue);
+                var propValue = resolver.ResolveOrParameter(x.Attribute, x.Data.PropertyType, x.Data.Name, parameters,
+                    out bool success);
+                if (success)
+                x.Data.SetValue(obj, propValue);
             }
         }
 
@@ -87,7 +95,7 @@ namespace VContainer.Internal
 
             foreach (var method in injectTypeInfo.InjectMethods)
             {
-                var parameterInfos = method.ParameterInfos;
+                var parameterInfos = method.Data.ParameterInfos;
                 var parameterValues = CappedArrayPool<object>.Shared8Limit.Rent(parameterInfos.Length);
                 try
                 {
@@ -95,15 +103,19 @@ namespace VContainer.Internal
                     {
                         var parameterInfo = parameterInfos[i];
                         parameterValues[i] = resolver.ResolveOrParameter(
+                            method.Attribute,
                             parameterInfo.ParameterType,
                             parameterInfo.Name,
-                            parameters);
+                            parameters,
+                            out bool success);
                     }
-                    method.MethodInfo.Invoke(obj, parameterValues);
+
+                    method.Data.MethodInfo.Invoke(obj, parameterValues);
                 }
                 catch (VContainerException ex)
                 {
-                    throw new VContainerException(ex.InvalidType, $"Failed to resolve {injectTypeInfo.Type} : {ex.Message}");
+                    throw new VContainerException(ex.InvalidType,
+                        $"Failed to resolve {injectTypeInfo.Type} : {ex.Message}");
                 }
                 finally
                 {

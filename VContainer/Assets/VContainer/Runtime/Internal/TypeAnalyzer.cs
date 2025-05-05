@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine;
 
 namespace VContainer.Internal
 {
@@ -62,18 +63,42 @@ namespace VContainer.Internal
 
     sealed class InjectTypeInfo
     {
+        public class InjectInfoBase
+        {
+            public InjectAttribute Attribute { get; set; }
+        }
+        
+        public class GenericInjectInfo<T> : InjectInfoBase
+        {
+            public T Data { get; set; }
+
+            public GenericInjectInfo(T data, System.Reflection.MemberInfo memberInfo)
+            {
+                this.Data = data;
+                var injectAttributes = memberInfo.GetCustomAttributes<InjectAttribute>(false);
+                if (!injectAttributes.Any())
+                {
+                    Attribute = injectAttributes.First();
+                }
+                else
+                {
+                    Debug.LogError("No Inject attribute found");
+                }
+            }
+        }
+        
         public readonly Type Type;
         public readonly InjectConstructorInfo InjectConstructor;
-        public readonly IReadOnlyList<InjectMethodInfo> InjectMethods;
-        public readonly IReadOnlyList<FieldInfo> InjectFields;
-        public readonly IReadOnlyList<PropertyInfo> InjectProperties;
+        public readonly IReadOnlyList<GenericInjectInfo<InjectMethodInfo>> InjectMethods;
+        public readonly IReadOnlyList<GenericInjectInfo<FieldInfo>> InjectFields;
+        public readonly IReadOnlyList<GenericInjectInfo<PropertyInfo>> InjectProperties;
 
         public InjectTypeInfo(
             Type type,
             InjectConstructorInfo injectConstructor,
-            IReadOnlyList<InjectMethodInfo> injectMethods,
-            IReadOnlyList<FieldInfo> injectFields,
-            IReadOnlyList<PropertyInfo> injectProperties)
+            IReadOnlyList<GenericInjectInfo<InjectMethodInfo>> injectMethods,
+            IReadOnlyList<GenericInjectInfo<FieldInfo>> injectFields,
+            IReadOnlyList<GenericInjectInfo<PropertyInfo>> injectProperties)
         {
             Type = type;
             InjectConstructor = injectConstructor;
@@ -204,9 +229,9 @@ namespace VContainer.Internal
                     throw new VContainerException(type, $"Type does not found injectable constructor, type: {type.Name}");
             }
 
-            var injectMethods = default(List<InjectMethodInfo>);
-            var injectFields = default(List<FieldInfo>);
-            var injectProperties = default(List<PropertyInfo>);
+            var injectMethods = default(List<InjectTypeInfo.GenericInjectInfo<InjectMethodInfo>>);
+            var injectFields = default(List<InjectTypeInfo.GenericInjectInfo<FieldInfo>>);
+            var injectProperties = default(List<InjectTypeInfo.GenericInjectInfo<PropertyInfo>>);
             var bindingFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
             while (type != null && type != typeof(object))
@@ -219,19 +244,19 @@ namespace VContainer.Internal
                     {
                         if (injectMethods == null)
                         {
-                            injectMethods = new List<InjectMethodInfo>();
+                            injectMethods = new List<InjectTypeInfo.GenericInjectInfo<InjectMethodInfo>>();
                         }
                         else
                         {
                             // Skip if already exists
                             foreach (var x in injectMethods)
                             {
-                                if (x.MethodInfo.GetBaseDefinition() == methodInfo.GetBaseDefinition())
+                                if (x.Data.MethodInfo.GetBaseDefinition() == methodInfo.GetBaseDefinition())
                                     goto EndMethod;
                             }
                         }
 
-                        injectMethods.Add(new InjectMethodInfo(methodInfo));
+                        injectMethods.Add(new InjectTypeInfo.GenericInjectInfo<InjectMethodInfo>(new InjectMethodInfo(methodInfo), methodInfo));
                     }
                 }
                 EndMethod:
@@ -244,7 +269,7 @@ namespace VContainer.Internal
                     {
                         if (injectFields == null)
                         {
-                            injectFields = new List<FieldInfo>();
+                            injectFields = new List<InjectTypeInfo.GenericInjectInfo<FieldInfo>>();
                         }
                         else
                         {
@@ -254,13 +279,13 @@ namespace VContainer.Internal
                                 throw new VContainerException(type, message);
                             }
 
-                            if (injectFields.Any(x => x.Name == fieldInfo.Name))
+                            if (injectFields.Any(x => x.Data.Name == fieldInfo.Name))
                             {
                                 continue;
                             }
                         }
 
-                        injectFields.Add(fieldInfo);
+                        injectFields.Add(new InjectTypeInfo.GenericInjectInfo<FieldInfo>(fieldInfo, fieldInfo));
                     }
                 }
 
@@ -272,17 +297,17 @@ namespace VContainer.Internal
                     {
                         if (injectProperties == null)
                         {
-                            injectProperties = new List<PropertyInfo>();
+                            injectProperties = new List<InjectTypeInfo.GenericInjectInfo<PropertyInfo>>();
                         }
                         else
                         {
                             foreach (var x in injectProperties)
                             {
-                                if (x.Name == propertyInfo.Name)
+                                if (x.Data.Name == propertyInfo.Name)
                                     goto EndProperty;
                             }
                         }
-                        injectProperties.Add(propertyInfo);
+                        injectProperties.Add(new InjectTypeInfo.GenericInjectInfo<PropertyInfo>(propertyInfo, propertyInfo));
                     }
                 }
                 EndProperty:
@@ -298,12 +323,12 @@ namespace VContainer.Internal
                 injectProperties);
         }
 
-        private static bool Contains(List<FieldInfo> fields, FieldInfo field)
+        private static bool Contains(List<InjectTypeInfo.GenericInjectInfo<FieldInfo>> fields, FieldInfo field)
         {
             for (var i = 0; i < fields.Count; i++)
             {
                 var x = fields[i];
-                if (x.Name == field.Name)
+                if (x.Data.Name == field.Name)
                 {
                     return true;
                 }
@@ -369,11 +394,11 @@ namespace VContainer.Internal
                 {
                     foreach (var methodInfo in injectTypeInfo.InjectMethods)
                     {
-                        foreach (var x in methodInfo.ParameterInfos)
+                        foreach (var x in methodInfo.Data.ParameterInfos)
                         {
                             if (registry.TryGet(x.ParameterType, out var parameterRegistration))
                             {
-                                CheckCircularDependencyRecursive(new DependencyInfo(parameterRegistration, current.Dependency, methodInfo.MethodInfo, x), registry, stack);
+                                CheckCircularDependencyRecursive(new DependencyInfo(parameterRegistration, current.Dependency, methodInfo.Data.MethodInfo, x), registry, stack);
                             }
                         }
                     }
@@ -383,9 +408,9 @@ namespace VContainer.Internal
                 {
                     foreach (var x in injectTypeInfo.InjectFields)
                     {
-                        if (registry.TryGet(x.FieldType, out var fieldRegistration))
+                        if (registry.TryGet(x.Data.FieldType, out var fieldRegistration))
                         {
-                            CheckCircularDependencyRecursive(new DependencyInfo(fieldRegistration, current.Dependency, x), registry, stack);
+                            CheckCircularDependencyRecursive(new DependencyInfo(fieldRegistration, current.Dependency, x.Data), registry, stack);
                         }
                     }
                 }
@@ -394,9 +419,9 @@ namespace VContainer.Internal
                 {
                     foreach (var x in injectTypeInfo.InjectProperties)
                     {
-                        if (registry.TryGet(x.PropertyType, out var propertyRegistration))
+                        if (registry.TryGet(x.Data.PropertyType, out var propertyRegistration))
                         {
-                            CheckCircularDependencyRecursive(new DependencyInfo(propertyRegistration, current.Dependency, x), registry, stack);
+                            CheckCircularDependencyRecursive(new DependencyInfo(propertyRegistration, current.Dependency, x.Data), registry, stack);
                         }
                     }
                 }
