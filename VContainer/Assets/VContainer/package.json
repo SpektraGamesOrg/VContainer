@@ -1,7 +1,7 @@
 {
   "name": "jp.hadashikick.vcontainer",
   "displayName": "VContainer",
-  "version": "10.0.2",
+  "version": "10.1.0",
   "unity": "2018.4",
   "description": "The extra fast DI (Dependency Injection) for Unity",
   "keywords": ["DI", "Dependency Injection", "DI Container"],
